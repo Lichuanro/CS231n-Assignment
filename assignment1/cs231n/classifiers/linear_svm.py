@@ -33,19 +33,16 @@ def svm_loss_naive(W, X, y, reg):
         continue
       margin = scores[j] - correct_class_score + 1 # note delta = 1
       if margin > 0:
-        loss += margin        
-        dW[:, j] += X[i, :].T
-        dW[:, y[i]] -= X[i, :].T
-        
+        loss += margin
+        dW[:,j] += X[i].T
+        dW[:,y[i]] += -X[i].T 
 
   # Right now the loss is a sum over all training examples, but we want it
   # to be an average instead so we divide by num_train.
   loss /= num_train
-
+  dW /= num_train
   # Add regularization to the loss.
-  loss += reg * np.sum(W * W)
-
-  # Add regularization to the gradient.
+  loss += 0.5 * reg * np.sum(W * W)
   dW += reg * W
 
   #############################################################################
@@ -68,30 +65,21 @@ def svm_loss_vectorized(W, X, y, reg):
   Inputs and outputs are the same as svm_loss_naive.
   """
   loss = 0.0
-  dW = np.zeros_like(W) # initialize the gradient as zero
+  dW = np.zeros(W.shape) # initialize the gradient as zero
 
   #############################################################################
   # TODO:                                                                     #
   # Implement a vectorized version of the structured SVM loss, storing the    #
   # result in loss.                                                           #
   #############################################################################
-  score = np.dot(X, W)
-  
-  y_mat = np.zeros_like(score)
-
-  for y_i in y:
-    y_mat[y_i, range(score.shape[1])] = 1
-        
-  correct_score = np.multiply(y_mat, score)
-  sums = np.sum(correct_score, axis=0)
-        
-  margins = score - sums + 1
-        
-  result = np.maximum(0, margins)
-  result = np.sum(result, axis=1) - 1
-        
-  loss = np.sum(result) / float(score.shape[0])
-  loss += reg * np.sum(W * W)
+  num_train = X.shape[0]
+  num_classes = W.shape[1]
+  scores = X.dot(W)
+  correct_class_scores = scores[range(num_train), list(y)].reshape(-1,1) #(N, 1)
+  # the correct one does not count
+  margins = np.maximum(0, scores - correct_class_scores +1)
+  margins[range(num_train), list(y)] = 0
+  loss = np.sum(margins) / num_train + 0.5 * reg * np.sum(W * W)
   #############################################################################
   #                             END OF YOUR CODE                              #
   #############################################################################
@@ -107,29 +95,13 @@ def svm_loss_vectorized(W, X, y, reg):
   # loss.                                                                     #
   #############################################################################
         
-  # make each entry 1 if it is > 0, 0 otherwise
-  margins[margins > 0] = 1
-  margins[margins < 0] = 0
+  coeff_mat = np.zeros((num_train, num_classes))
+  coeff_mat[margins > 0] = 1
+  coeff_mat[range(num_train), list(y)] = 0
+  coeff_mat[range(num_train), list(y)] = -np.sum(coeff_mat, axis=1)
 
-  # keep margins mostly the same but for each column, zero out the row corresponding to the
-  # correct label
-  # (basically change the 1's to 0's, since we are doing w_y*x - w_y*x + 1 for those entries)
-  for y_i in y:
-    margins[y_i, range(score.shape[1])] = 0
-
-  # compute column sums and then set the elements that we zeroed out above to the negative of
-  # that sum
-  col_sums = np.sum(margins, axis=0)
-
-  for y_i in y:
-    margins[y_i, range(score.shape[1])] = -1.0 * col_sums
-
-  dW = np.dot(X.T, margins)
-
-  dW /= float(score.shape[1])
-
-  # Add regularization to the gradient
-  dW += reg * W
+  dW = (X.T).dot(coeff_mat)
+  dW = dW/num_train + reg*W
   #############################################################################
   #                             END OF YOUR CODE                              #
   #############################################################################
